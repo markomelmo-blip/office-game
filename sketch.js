@@ -45,7 +45,10 @@ function setup() {
 }
 
 function draw() {
+  // Очищаємо попередні кадри та малюємо фон
+  background(0);
   image(bgImg, 0, 0, width, height);
+
   drawProgressText();
 
   if (mainChar.hp <= 0 || deadChars >= 3) {
@@ -56,6 +59,7 @@ function draw() {
 
   mainChar.update();
   mainChar.draw();
+
   chars.forEach(c => c.draw());
 
   if (gameStarted && spawnedItems < TOTAL_ITEMS) {
@@ -150,9 +154,9 @@ class Character {
   draw() {
     if (this.dead) return;
     imageMode(CENTER);
-    image(this.img, this.pos.x, this.pos.y, 60, 60);
+    image(this.img, this.pos.x, this.pos.y, 120, 120); // збільшено у 2 рази
     fill(0, 255, 0);
-    rect(this.pos.x - 30, this.pos.y - 45, map(this.hp, 0, 100, 0, 60), 5);
+    rect(this.pos.x - 60, this.pos.y - 90, map(this.hp, 0, 100, 0, 120), 10); // зелений HP-бар також більший
   }
 
   takeHit() {
@@ -189,17 +193,17 @@ class Item {
   draw() {
     imageMode(CENTER);
     if (this.isFood) {
-      image(foodImg, this.pos.x, this.pos.y, 22, 22);
+      image(foodImg, this.pos.x, this.pos.y, 44, 44); // обʼєкт у 2 рази більший
     } else {
-      image(itemImg, this.pos.x, this.pos.y, 22, 22);
+      image(itemImg, this.pos.x, this.pos.y, 44, 44);
     }
   }
 
   hits(char) {
-    return !char.dead && dist(this.pos.x, this.pos.y, char.pos.x, char.pos.y) < 30;
+    return !char.dead && dist(this.pos.x, this.pos.y, char.pos.x, char.pos.y) < 60; // збільшено
   }
 
   isHovered() {
-    return dist(mouseX, mouseY, this.pos.x, this.pos.y) < 12;
+    return dist(mouseX, mouseY, this.pos.x, this.pos.y) < 22; // збільшено
   }
 }
