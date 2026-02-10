@@ -1,165 +1,331 @@
-let bgImg;
-let mainImg;
+let bg;
+let mainImg, taskImg, beetrootImg;
 let characterImgs = [];
-let foodImg;
 
-let mainChar;
+let mainCharacter;
 let characters = [];
-let foods = [];
+let tasks = [];
+
+const TOTAL_TASKS = 30;
+let spawnedTasks = 0;
 
 let gameStarted = false;
-let bounceOffset = 0;
-let bounceDir = 1;
+let gameOver = false;
+let youWin = false;
 
-let HP = 0;
-const BASE_SPEED = 1.2;
+let activeTasksPerTarget = new Map();
 
-// ---------- preload ----------
+/* ===== PRELOAD ===== */
+
 function preload() {
-  bgImg = loadImage('background.png'); // ФОН З МИНУЛОЇ ВЕРСІЇ
-  mainImg = loadImage('main.png');
+  bg = loadImage('images/background.png');
+  mainImg = loadImage('images/main.png');
 
-  characterImgs[0] = loadImage('character_1.png');
-  characterImgs[1] = loadImage('character_2.png');
-  characterImgs[2] = loadImage('character_3.png');
-  characterImgs[3] = loadImage('character_4.png');
+  for (let i = 1; i <= 5; i++) {
+    characterImgs.push(loadImage(`images/character_${i}.png`));
+  }
 
-  foodImg = loadImage('food.png');
+  taskImg = loadImage('images/task.png');
+  beetrootImg = loadImage('images/beetroot.png');
 }
 
-// ---------- setup ----------
+/* ===== SETUP ===== */
+
 function setup() {
-  createCanvas(800, 600);
+  createCanvas(1200, 800);
   imageMode(CENTER);
+  textAlign(CENTER, CENTER);
 
-  mainChar = {
-    x: width / 2,
-    y: height / 2,
-    size: 90
-  };
+  let centerX = width / 2;
+  let centerY = height / 2 - 80;
+  let radius = 240;
 
-  setupCharacters();
-  setupFood();
-}
+  let npcPositions = [];
 
-// ---------- helpers ----------
-function drawProportional(img, x, y, targetSize) {
-  const ratio = img.width / img.height;
-  let w, h;
-
-  if (ratio > 1) {
-    w = targetSize;
-    h = targetSize / ratio;
-  } else {
-    h = targetSize;
-    w = targetSize * ratio;
-  }
-
-  image(img, x, y, w, h);
-}
-
-function setupCharacters() {
-  characters = [];
-  const radius = 180;
-
-  for (let i = 0; i < 4; i++) {
-    let angle = (TWO_PI / 4) * i;
-    let x = width / 2 + cos(angle) * radius;
-    let y = height / 2 + sin(angle) * radius;
-
-    // Індивідуальні корекції
-    if (i === 1) { // character_2
-      x += 40;
-      y -= 20;
-    }
-    if (i === 2) { // character_3
-      x -= 15;
-    }
-
-    characters.push({
-      x,
-      y,
-      img: characterImgs[i],
-      size: 70
+  for (let i = 0; i < characterImgs.length; i++) {
+    let angle = TWO_PI / characterImgs.length * i;
+    npcPositions.push({
+      x: centerX + cos(angle) * radius,
+      y: centerY + sin(angle) * radius
     });
   }
-}
 
-function setupFood() {
-  foods = [];
-  for (let i = 0; i < 6; i++) {
-    foods.push({
-      x: random(width),
-      y: random(height),
-      size: 40,
-      vx: random(-1, 1) * BASE_SPEED,
-      vy: random(-1, 1) * BASE_SPEED,
-      active: true
-    });
+  // зсуви для конкретних персонажів
+  npcPositions[1].x += 60;  // character_2 → правіше
+  npcPositions[1].y -= 40;  // і вище
+  npcPositions[2].x -= 30;  // character_3 → трохи лівіше
+
+  // міняємо місцями main і character_4 (index 3)
+  let swapIndex = 3;
+  let mainOldPos = { x: width / 2, y: height - 120 };
+
+  mainCharacter = new Character(
+    npcPositions[swapIndex].x,
+    npcPositions[swapIndex].y,
+    mainImg,
+    true
+  );
+
+  for (let i = 0; i < characterImgs.length; i++) {
+    let pos = npcPositions[i];
+    if (i === swapIndex) pos = mainOldPos;
+
+    let c = new Character(pos.x, pos.y, characterImgs[i], false);
+    characters.push(c);
+    activeTasksPerTarget.set(c, 0);
   }
 }
 
-// ---------- draw ----------
+/* ===== DRAW ===== */
+
 function draw() {
-  drawProportional(bgImg, width / 2, height / 2, max(width, height));
+  drawBackground();
+
+  if (gameOver) {
+    drawEndScreen();
+    return;
+  }
 
   if (!gameStarted) {
-    bounceOffset += bounceDir * 0.6;
-    if (bounceOffset > 10 || bounceOffset < -10) bounceDir *= -1;
+    mainCharacter.jumpHint();
   }
 
-  drawFood();
-  drawCharacters();
-  drawMainCharacter();
+  mainCharacter.update();
+  mainCharacter.draw();
+  mainCharacter.drawHP();
 
-  fill(255);
-  textSize(18);
-  text(`HP: ${HP}`, 20, 30);
+  for (let c of characters) {
+    c.draw();
+    c.drawHP();
+  }
+
+  if (gameStarted) {
+    handleSpawning();
+    updateTasks();
+    drawProgress();
+    checkEndConditions();
+  }
 }
 
-// ---------- entities ----------
-function drawMainCharacter() {
-  let y = mainChar.y + (gameStarted ? 0 : bounceOffset);
-  drawProportional(mainImg, mainChar.x, y, mainChar.size);
+/* ===== BACKGROUND ===== */
+
+function drawBackground() {
+  let canvasRatio = width / height;
+  let imgRatio = bg.width / bg.height;
+
+  let w, h;
+  if (canvasRatio > imgRatio) {
+    w = width;
+    h = width / imgRatio;
+  } else {
+    h = height;
+    w = height * imgRatio;
+  }
+
+  image(bg, width / 2, height / 2, w, h);
 }
 
-function drawCharacters() {
-  characters.forEach(c => {
-    drawProportional(c.img, c.x, c.y, c.size);
-  });
-}
+/* ===== INPUT ===== */
 
-function drawFood() {
-  foods.forEach(f => {
-    if (!f.active) return;
-
-    f.x += f.vx;
-    f.y += f.vy;
-
-    if (f.x < 0 || f.x > width) f.vx *= -1;
-    if (f.y < 0 || f.y > height) f.vy *= -1;
-
-    drawProportional(foodImg, f.x, f.y, f.size);
-
-    // Контакт з головним персонажем
-    if (
-      dist(f.x, f.y, mainChar.x, mainChar.y) <
-      (f.size + mainChar.size) / 2
-    ) {
-      f.active = false;
-      HP += 1;
-    }
-  });
-}
-
-// ---------- input ----------
 function mousePressed() {
   if (!gameStarted) {
-    if (
-      dist(mouseX, mouseY, mainChar.x, mainChar.y) <
-      mainChar.size / 2
-    ) {
+    if (dist(mouseX, mouseY, mainCharacter.pos.x, mainCharacter.pos.y) < 60) {
       gameStarted = true;
+      mainCharacter.stopJump();
     }
+    return;
+  }
+
+  for (let t of tasks) {
+    if (!t.clicked && t.isClicked(mouseX, mouseY)) {
+      t.clicked = true;
+      break;
+    }
+  }
+}
+
+/* ===== SPAWN ===== */
+
+function handleSpawning() {
+  if (spawnedTasks >= TOTAL_TASKS) return;
+  if (frameCount % 50 !== 0) return;
+
+  let available = characters.filter(
+    c => c.alive && activeTasksPerTarget.get(c) === 0
+  );
+
+  if (!available.length) return;
+
+  let target = random(available);
+
+  tasks.push(
+    new Task(
+      mainCharacter.pos.x,
+      mainCharacter.pos.y - 60,
+      target
+    )
+  );
+
+  activeTasksPerTarget.set(target, 1);
+  spawnedTasks++;
+}
+
+/* ===== TASK UPDATE ===== */
+
+function updateTasks() {
+  for (let i = tasks.length - 1; i >= 0; i--) {
+    let t = tasks[i];
+    t.update();
+    t.draw();
+
+    if (t.hits(t.target)) {
+      t.clicked ? t.target.heal() : t.target.takeDamage();
+      activeTasksPerTarget.set(t.target, 0);
+      tasks.splice(i, 1);
+      continue;
+    }
+
+    if (t.offscreen()) {
+      activeTasksPerTarget.set(t.target, 0);
+      tasks.splice(i, 1);
+    }
+  }
+}
+
+/* ===== GAME STATE ===== */
+
+function checkEndConditions() {
+  if (!mainCharacter.alive) gameOver = true;
+
+  if (
+    spawnedTasks === TOTAL_TASKS &&
+    tasks.length === 0 &&
+    mainCharacter.alive
+  ) {
+    youWin = true;
+    gameOver = true;
+  }
+}
+
+function drawEndScreen() {
+  fill(0, 180);
+  rect(0, 0, width, height);
+  fill(255);
+  textSize(48);
+  text(youWin ? 'YOU WIN 🎉' : 'GAME OVER', width / 2, height / 2);
+}
+
+function drawProgress() {
+  fill(255);
+  textSize(18);
+  text(`${spawnedTasks}/${TOTAL_TASKS}`, width - 60, 30);
+}
+
+/* ===== CLASSES ===== */
+
+class Character {
+  constructor(x, y, img, isMain) {
+    this.basePos = createVector(x, y);
+    this.pos = this.basePos.copy();
+    this.img = img;
+    this.isMain = isMain;
+
+    this.maxHP = 3;
+    this.hp = 3;
+    this.alive = true;
+
+    this.displayWidth = 96;
+
+    this.jumpPhase = 0;
+    this.jumping = false;
+  }
+
+  update() {
+    if (this.jumping) {
+      this.jumpPhase += 0.08;
+      this.pos.y = this.basePos.y + sin(this.jumpPhase) * 12;
+    }
+  }
+
+  jumpHint() {
+    this.jumping = true;
+  }
+
+  stopJump() {
+    this.jumping = false;
+    this.pos.y = this.basePos.y;
+  }
+
+  draw() {
+    if (!this.alive) return;
+    let ratio = this.img.height / this.img.width;
+    image(
+      this.img,
+      this.pos.x,
+      this.pos.y,
+      this.displayWidth,
+      this.displayWidth * ratio
+    );
+  }
+
+  drawHP() {
+    if (!this.alive) return;
+    let w = 50, h = 6;
+    let x = this.pos.x - w / 2;
+    let y = this.pos.y - 70;
+    fill(255, 0, 0);
+    rect(x, y, w, h);
+    fill(0, 255, 0);
+    rect(x, y, w * (this.hp / this.maxHP), h);
+  }
+
+  takeDamage() {
+    this.hp--;
+    if (this.hp <= 0) {
+      this.alive = false;
+      if (!this.isMain) mainCharacter.takeDamage();
+    }
+  }
+
+  heal() {
+    if (this.hp < this.maxHP) this.hp++;
+  }
+}
+
+class Task {
+  constructor(x, y, target) {
+    this.pos = createVector(x, y);
+    this.target = target;
+
+    let dir = p5.Vector.sub(target.pos, this.pos).normalize();
+    this.velocity = dir.mult(2.4); // ⬅️ пришвидшено
+
+    this.size = 48;
+    this.clicked = false;
+  }
+
+  update() {
+    this.pos.add(this.velocity);
+  }
+
+  draw() {
+    let img = this.clicked ? beetrootImg : taskImg;
+    let ratio = img.height / img.width;
+    image(img, this.pos.x, this.pos.y, this.size, this.size * ratio);
+  }
+
+  hits(character) {
+    return dist(this.pos.x, this.pos.y, character.pos.x, character.pos.y) < 45;
+  }
+
+  isClicked(mx, my) {
+    return dist(mx, my, this.pos.x, this.pos.y) < this.size / 2;
+  }
+
+  offscreen() {
+    return (
+      this.pos.x < -80 || this.pos.x > width + 80 ||
+      this.pos.y < -80 || this.pos.y > height + 80
+    );
   }
 }
