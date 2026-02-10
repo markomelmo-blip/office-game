@@ -1,149 +1,190 @@
 let bgImg;
 let mainImg;
+let charImgs = [];
+let taskImg;
 let foodImg;
-let characters = [];
-let foods = [];
+
+let mainChar;
+let chars = [];
+let items = [];
 
 let gameStarted = false;
-let hp = 0;
-
-const CENTER = { x: 400, y: 400 };
-const BASE_RADIUS = 230;
-let foodSpeedMultiplier = 1.2;
+let spawnedItems = 0;
+const MAX_ITEMS = 30;
 
 function preload() {
-  bgImg = loadImage("background.png");
-  mainImg = loadImage("main.png");
-  foodImg = loadImage("food.png");
+  bgImg = loadImage("images/background.png");
+  mainImg = loadImage("images/main.png");
 
-  characters.push(loadImage("character_2.png"));
-  characters.push(loadImage("character_3.png"));
-  characters.push(loadImage("character_4.png"));
+  for (let i = 1; i <= 5; i++) {
+    charImgs.push(loadImage(`images/character_${i}.png`));
+  }
+
+  taskImg = loadImage("images/task.png");
+  foodImg = loadImage("images/beetroot.png");
 }
 
 function setup() {
-  createCanvas(800, 800);
+  createCanvas(800, 600);
   imageMode(CENTER);
-  setupCharacters();
-}
 
-function setupCharacters() {
-  let angles = [0, TWO_PI / 3, (2 * TWO_PI) / 3];
+  mainChar = new Character(width / 2, height / 2, mainImg, true);
 
-  characters = characters.map((img, i) => {
-    let x = CENTER.x + cos(angles[i]) * BASE_RADIUS;
-    let y = CENTER.y + sin(angles[i]) * BASE_RADIUS;
+  const radius = 200;
+  for (let i = 0; i < 5; i++) {
+    let angle = TWO_PI * i / 5;
+    let x = width / 2 + cos(angle) * radius;
+    let y = height / 2 + sin(angle) * radius;
 
-    if (i === 0) { x += 40; y -= 30; }
-    if (i === 1) { x -= 15; }
+    // ручні корекції
+    if (i === 1) { x += 30; y -= 20; } // character_2
+    if (i === 2) { x -= 15; }          // character_3
+    if (i === 3) { /* character_4 — без змін */ }
 
-    return {
-      img,
-      x,
-      y,
-      scale: i === 2 ? 1.1 : 1
-    };
-  });
+    chars.push(new Character(x, y, charImgs[i]));
+  }
 }
 
 function draw() {
-  background(20);
-  drawBackground();
+  background(0);
 
-  drawCharacters();
-  drawMain();
+  // ФОН — як у попередній стабільній версії
+  image(bgImg, width / 2, height / 2, width, height);
 
-  if (!gameStarted) {
-    idleBounce();
+  if (mainChar.hp <= 0) {
+    drawCenterText("GAME OVER");
     return;
   }
 
-  updateFoods();
-  drawFoods();
-}
+  if (spawnedItems >= MAX_ITEMS && mainChar.hp > 0) {
+    drawCenterText("YOU WIN 🎉");
+    return;
+  }
 
-/* =======================
-   ВИПРАВЛЕНИЙ ФОН
-======================= */
-function drawBackground() {
-  let bgSize = 640; // менший за canvas
+  drawProgressText();
 
-  let cropSize = min(bgImg.width, bgImg.height);
-  let sx = (bgImg.width - cropSize) / 2;
-  let sy = (bgImg.height - cropSize) / 2;
+  mainChar.update();
+  mainChar.draw();
 
-  image(
-    bgImg,
-    CENTER.x,
-    CENTER.y,
-    bgSize,
-    bgSize,
-    sx,
-    sy,
-    cropSize,
-    cropSize
-  );
-}
+  chars.forEach(c => c.draw());
 
-function drawMain() {
-  let h = 120;
-  let w = (mainImg.width / mainImg.height) * h;
-  image(mainImg, CENTER.x, CENTER.y, w, h);
-}
+  // спавн тасків
+  if (
+    gameStarted &&
+    spawnedItems < MAX_ITEMS &&
+    frameCount % 40 === 0
+  ) {
+    let target = random(chars);
+    items.push(new Item(mainChar.pos.x, mainChar.pos.y, target));
+    spawnedItems++;
+  }
 
-function drawCharacters() {
-  characters.forEach(c => {
-    let h = 100 * c.scale;
-    let w = (c.img.width / c.img.height) * h;
-    image(c.img, c.x, c.y, w, h);
+  items.forEach(item => {
+    item.update();
+    item.draw();
+
+    chars.forEach(c => {
+      if (!item.dead && item.hits(c)) {
+        c.hp = min(100, c.hp + (item.isFood ? 10 : -10));
+        item.dead = true;
+      }
+    });
   });
-}
 
-let bounceOffset = 0;
-function idleBounce() {
-  bounceOffset = sin(frameCount * 0.08) * 8;
-  translate(0, bounceOffset);
+  items = items.filter(i => !i.dead);
 }
 
 function mousePressed() {
-  if (!gameStarted) {
-    if (dist(mouseX, mouseY, CENTER.x, CENTER.y) < 60) {
-      gameStarted = true;
-      spawnFood();
+  // старт гри
+  if (
+    !gameStarted &&
+    dist(mouseX, mouseY, mainChar.pos.x, mainChar.pos.y) < 40
+  ) {
+    gameStarted = true;
+    mainChar.jumpHint = false;
+    return;
+  }
+
+  // клік по таску → їжа
+  items.forEach(item => {
+    if (item.isHovered()) item.isFood = true;
+  });
+}
+
+/* ===== UI ===== */
+
+function drawProgressText() {
+  fill(255);
+  textSize(18);
+  textAlign(RIGHT, TOP);
+  text(`${spawnedItems}/${MAX_ITEMS}`, width - 10, 10);
+}
+
+function drawCenterText(txt) {
+  fill(255);
+  textSize(36);
+  textAlign(CENTER, CENTER);
+  text(txt, width / 2, height / 2);
+}
+
+/* ===== CLASSES ===== */
+
+class Character {
+  constructor(x, y, img, isMain = false) {
+    this.basePos = createVector(x, y);
+    this.pos = this.basePos.copy();
+    this.img = img;
+    this.hp = 100;
+    this.isMain = isMain;
+    this.jumpHint = isMain;
+    this.size = isMain ? 90 : 80;
+  }
+
+  update() {
+    if (this.jumpHint) {
+      this.pos.y = this.basePos.y + sin(frameCount * 0.15) * 10;
     }
+  }
+
+  draw() {
+    const ratio = this.img.width / this.img.height;
+    const h = this.size;
+    const w = h * ratio;
+
+    image(this.img, this.pos.x, this.pos.y, w, h);
+
+    // HP
+    fill(0, 255, 0);
+    rect(this.pos.x - 30, this.pos.y - h / 2 - 10, map(this.hp, 0, 100, 0, 60), 5);
   }
 }
 
-function spawnFood() {
-  foods.push({
-    x: CENTER.x,
-    y: CENTER.y,
-    angle: random(TWO_PI),
-    speed: random(1.5, 2.2) * foodSpeedMultiplier
-  });
-}
+class Item {
+  constructor(x, y, target) {
+    this.pos = createVector(x, y);
+    this.vel = p5.Vector.sub(target.pos, this.pos)
+      .setMag(2.2);
+    this.target = target;
+    this.isFood = false;
+    this.dead = false;
+    this.size = 36;
+  }
 
-function updateFoods() {
-  foods.forEach(f => {
-    f.x += cos(f.angle) * f.speed;
-    f.y += sin(f.angle) * f.speed;
-  });
+  update() {
+    this.pos.add(this.vel);
+  }
 
-  foods = foods.filter(f => {
-    if (dist(f.x, f.y, CENTER.x, CENTER.y) < 50) {
-      hp++;
-      return false;
-    }
-    return true;
-  });
+  draw() {
+    const img = this.isFood ? foodImg : taskImg;
+    const ratio = img.width / img.height;
+    image(img, this.pos.x, this.pos.y, this.size * ratio, this.size);
+  }
 
-  if (frameCount % 90 === 0) spawnFood();
-}
+  hits(char) {
+    return dist(this.pos.x, this.pos.y, char.pos.x, char.pos.y) < 30;
+  }
 
-function drawFoods() {
-  foods.forEach(f => {
-    let h = 40;
-    let w = (foodImg.width / foodImg.height) * h;
-    image(foodImg, f.x, f.y, w, h);
-  });
+  isHovered() {
+    return dist(mouseX, mouseY, this.pos.x, this.pos.y) < this.size / 2;
+  }
 }
