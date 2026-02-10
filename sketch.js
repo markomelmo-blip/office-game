@@ -8,50 +8,79 @@ let tasks = [];
 
 const TOTAL_TASKS = 30;
 let spawnedTasks = 0;
+
 let gameOver = false;
 let youWin = false;
 
 let activeTasksPerTarget = new Map();
 
+/* ===== PRELOAD ===== */
+
 function preload() {
   bg = loadImage('images/background.png');
 
   mainImg = loadImage('images/main.png');
-  taskImg = loadImage('images/task.png');
-  beetrootImg = loadImage('images/beetroot.png');
 
   for (let i = 1; i <= 5; i++) {
     characterImgs.push(loadImage(`images/character_${i}.png`));
   }
+
+  taskImg = loadImage('images/task.png');
+  beetrootImg = loadImage('images/beetroot.png');
 }
+
+/* ===== SETUP ===== */
 
 function setup() {
   createCanvas(1200, 800);
   imageMode(CENTER);
   textAlign(CENTER, CENTER);
 
-  mainCharacter = new Character(width / 2, height - 120, mainImg, true);
-
   let centerX = width / 2;
   let centerY = height / 2 - 80;
   let radius = 240;
 
+  let npcPositions = [];
+
   for (let i = 0; i < characterImgs.length; i++) {
     let angle = TWO_PI / characterImgs.length * i;
-    let x = centerX + cos(angle) * radius;
-    let y = centerY + sin(angle) * radius;
+    npcPositions.push({
+      x: centerX + cos(angle) * radius,
+      y: centerY + sin(angle) * radius
+    });
+  }
 
-    let c = new Character(x, y, characterImgs[i], false);
+  // ⬅️ міняємо місцями main і character_4 (index 3)
+  let swapIndex = 3;
+  let mainOldPos = { x: width / 2, y: height - 120 };
+
+  mainCharacter = new Character(
+    npcPositions[swapIndex].x,
+    npcPositions[swapIndex].y,
+    mainImg,
+    true
+  );
+
+  for (let i = 0; i < characterImgs.length; i++) {
+    let pos = npcPositions[i];
+
+    if (i === swapIndex) {
+      pos = mainOldPos;
+    }
+
+    let c = new Character(pos.x, pos.y, characterImgs[i], false);
     characters.push(c);
     activeTasksPerTarget.set(c, 0);
   }
 }
 
+/* ===== DRAW ===== */
+
 function draw() {
   image(bg, width / 2, height / 2, width, height);
 
   if (gameOver) {
-    showEndScreen();
+    drawEndScreen();
     return;
   }
 
@@ -66,9 +95,10 @@ function draw() {
   handleSpawning();
   updateTasks();
   drawProgress();
-
-  checkWinCondition();
+  checkEndConditions();
 }
+
+/* ===== TASK SPAWN ===== */
 
 function handleSpawning() {
   if (spawnedTasks >= TOTAL_TASKS) return;
@@ -78,20 +108,23 @@ function handleSpawning() {
     c => c.alive && activeTasksPerTarget.get(c) === 0
   );
 
-  if (available.length === 0) return;
+  if (!available.length) return;
 
   let target = random(available);
 
-  let task = new Task(
-    mainCharacter.pos.x,
-    mainCharacter.pos.y - 60,
-    target
+  tasks.push(
+    new Task(
+      mainCharacter.pos.x,
+      mainCharacter.pos.y - 60,
+      target
+    )
   );
 
-  tasks.push(task);
   activeTasksPerTarget.set(target, 1);
   spawnedTasks++;
 }
+
+/* ===== TASK UPDATE ===== */
 
 function updateTasks() {
   for (let i = tasks.length - 1; i >= 0; i--) {
@@ -99,14 +132,10 @@ function updateTasks() {
     t.update();
     t.draw();
 
-    if (!t.clicked && t.hits(t.target)) {
-      t.target.takeDamage();
-      activeTasksPerTarget.set(t.target, 0);
-      tasks.splice(i, 1);
-      continue;
-    }
+    if (t.hits(t.target)) {
+      if (t.clicked) t.target.heal();
+      else t.target.takeDamage();
 
-    if (t.clicked && t.timer-- <= 0) {
       activeTasksPerTarget.set(t.target, 0);
       tasks.splice(i, 1);
       continue;
@@ -119,18 +148,24 @@ function updateTasks() {
   }
 }
 
+/* ===== INPUT ===== */
+
 function mousePressed() {
   for (let t of tasks) {
     if (!t.clicked && t.isClicked(mouseX, mouseY)) {
       t.clicked = true;
-      t.timer = 25;
-      t.target.heal();
       break;
     }
   }
 }
 
-function checkWinCondition() {
+/* ===== GAME STATE ===== */
+
+function checkEndConditions() {
+  if (!mainCharacter.alive) {
+    gameOver = true;
+  }
+
   if (
     spawnedTasks === TOTAL_TASKS &&
     tasks.length === 0 &&
@@ -139,24 +174,15 @@ function checkWinCondition() {
     youWin = true;
     gameOver = true;
   }
-
-  if (!mainCharacter.alive) {
-    gameOver = true;
-  }
 }
 
-function showEndScreen() {
+function drawEndScreen() {
   fill(0, 180);
   rect(0, 0, width, height);
 
   fill(255);
   textSize(48);
-
-  if (youWin) {
-    text('YOU WIN 🎉', width / 2, height / 2);
-  } else {
-    text('GAME OVER', width / 2, height / 2);
-  }
+  text(youWin ? 'YOU WIN 🎉' : 'GAME OVER', width / 2, height / 2);
 }
 
 function drawProgress() {
@@ -177,20 +203,29 @@ class Character {
     this.hp = 3;
     this.alive = true;
 
-    this.size = 96;
+    this.displayWidth = 96;
   }
 
   draw() {
     if (!this.alive) return;
-    image(this.img, this.pos.x, this.pos.y, this.size, this.size);
+
+    let ratio = this.img.height / this.img.width;
+    image(
+      this.img,
+      this.pos.x,
+      this.pos.y,
+      this.displayWidth,
+      this.displayWidth * ratio
+    );
   }
 
   drawHP() {
     if (!this.alive) return;
+
     let w = 50;
     let h = 6;
     let x = this.pos.x - w / 2;
-    let y = this.pos.y - this.size / 2 - 12;
+    let y = this.pos.y - 70;
 
     fill(255, 0, 0);
     rect(x, y, w, h);
@@ -221,7 +256,6 @@ class Task {
 
     this.size = 48;
     this.clicked = false;
-    this.timer = 0;
   }
 
   update() {
@@ -229,8 +263,13 @@ class Task {
   }
 
   draw() {
-    let img = this.clicked ? beetrootImg : taskImg;
-    image(img, this.pos.x, this.pos.y, this.size, this.size);
+    image(
+      this.clicked ? beetrootImg : taskImg,
+      this.pos.x,
+      this.pos.y,
+      this.size,
+      this.size
+    );
   }
 
   hits(character) {
@@ -239,7 +278,7 @@ class Task {
       this.pos.y,
       character.pos.x,
       character.pos.y
-    ) < 40;
+    ) < 45;
   }
 
   isClicked(mx, my) {
@@ -248,8 +287,8 @@ class Task {
 
   offscreen() {
     return (
-      this.pos.x < -50 || this.pos.x > width + 50 ||
-      this.pos.y < -50 || this.pos.y > height + 50
+      this.pos.x < -60 || this.pos.x > width + 60 ||
+      this.pos.y < -60 || this.pos.y > height + 60
     );
   }
 }
