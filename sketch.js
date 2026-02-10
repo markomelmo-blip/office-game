@@ -9,7 +9,6 @@ let tasks = [];
 const TOTAL_TASKS = 30;
 let spawnedTasks = 0;
 
-let gameStarted = false;
 let gameOver = false;
 let youWin = false;
 
@@ -19,6 +18,7 @@ let activeTasksPerTarget = new Map();
 
 function preload() {
   bg = loadImage('images/background.png');
+
   mainImg = loadImage('images/main.png');
 
   for (let i = 1; i <= 5; i++) {
@@ -50,12 +50,7 @@ function setup() {
     });
   }
 
-  // зсуви для конкретних персонажів
-  npcPositions[1].x += 60;  // character_2 → правіше
-  npcPositions[1].y -= 40;  // і вище
-  npcPositions[2].x -= 30;  // character_3 → трохи лівіше
-
-  // міняємо місцями main і character_4 (index 3)
+  // ⬅️ міняємо місцями main і character_4 (index 3)
   let swapIndex = 3;
   let mainOldPos = { x: width / 2, y: height - 120 };
 
@@ -68,7 +63,10 @@ function setup() {
 
   for (let i = 0; i < characterImgs.length; i++) {
     let pos = npcPositions[i];
-    if (i === swapIndex) pos = mainOldPos;
+
+    if (i === swapIndex) {
+      pos = mainOldPos;
+    }
 
     let c = new Character(pos.x, pos.y, characterImgs[i], false);
     characters.push(c);
@@ -79,18 +77,13 @@ function setup() {
 /* ===== DRAW ===== */
 
 function draw() {
-  drawBackground();
+  image(bg, width / 2, height / 2, width, height);
 
   if (gameOver) {
     drawEndScreen();
     return;
   }
 
-  if (!gameStarted) {
-    mainCharacter.jumpHint();
-  }
-
-  mainCharacter.update();
   mainCharacter.draw();
   mainCharacter.drawHP();
 
@@ -99,52 +92,13 @@ function draw() {
     c.drawHP();
   }
 
-  if (gameStarted) {
-    handleSpawning();
-    updateTasks();
-    drawProgress();
-    checkEndConditions();
-  }
+  handleSpawning();
+  updateTasks();
+  drawProgress();
+  checkEndConditions();
 }
 
-/* ===== BACKGROUND ===== */
-
-function drawBackground() {
-  let canvasRatio = width / height;
-  let imgRatio = bg.width / bg.height;
-
-  let w, h;
-  if (canvasRatio > imgRatio) {
-    w = width;
-    h = width / imgRatio;
-  } else {
-    h = height;
-    w = height * imgRatio;
-  }
-
-  image(bg, width / 2, height / 2, w, h);
-}
-
-/* ===== INPUT ===== */
-
-function mousePressed() {
-  if (!gameStarted) {
-    if (dist(mouseX, mouseY, mainCharacter.pos.x, mainCharacter.pos.y) < 60) {
-      gameStarted = true;
-      mainCharacter.stopJump();
-    }
-    return;
-  }
-
-  for (let t of tasks) {
-    if (!t.clicked && t.isClicked(mouseX, mouseY)) {
-      t.clicked = true;
-      break;
-    }
-  }
-}
-
-/* ===== SPAWN ===== */
+/* ===== TASK SPAWN ===== */
 
 function handleSpawning() {
   if (spawnedTasks >= TOTAL_TASKS) return;
@@ -179,7 +133,9 @@ function updateTasks() {
     t.draw();
 
     if (t.hits(t.target)) {
-      t.clicked ? t.target.heal() : t.target.takeDamage();
+      if (t.clicked) t.target.heal();
+      else t.target.takeDamage();
+
       activeTasksPerTarget.set(t.target, 0);
       tasks.splice(i, 1);
       continue;
@@ -192,10 +148,23 @@ function updateTasks() {
   }
 }
 
+/* ===== INPUT ===== */
+
+function mousePressed() {
+  for (let t of tasks) {
+    if (!t.clicked && t.isClicked(mouseX, mouseY)) {
+      t.clicked = true;
+      break;
+    }
+  }
+}
+
 /* ===== GAME STATE ===== */
 
 function checkEndConditions() {
-  if (!mainCharacter.alive) gameOver = true;
+  if (!mainCharacter.alive) {
+    gameOver = true;
+  }
 
   if (
     spawnedTasks === TOTAL_TASKS &&
@@ -210,6 +179,7 @@ function checkEndConditions() {
 function drawEndScreen() {
   fill(0, 180);
   rect(0, 0, width, height);
+
   fill(255);
   textSize(48);
   text(youWin ? 'YOU WIN 🎉' : 'GAME OVER', width / 2, height / 2);
@@ -225,8 +195,7 @@ function drawProgress() {
 
 class Character {
   constructor(x, y, img, isMain) {
-    this.basePos = createVector(x, y);
-    this.pos = this.basePos.copy();
+    this.pos = createVector(x, y);
     this.img = img;
     this.isMain = isMain;
 
@@ -235,29 +204,11 @@ class Character {
     this.alive = true;
 
     this.displayWidth = 96;
-
-    this.jumpPhase = 0;
-    this.jumping = false;
-  }
-
-  update() {
-    if (this.jumping) {
-      this.jumpPhase += 0.08;
-      this.pos.y = this.basePos.y + sin(this.jumpPhase) * 12;
-    }
-  }
-
-  jumpHint() {
-    this.jumping = true;
-  }
-
-  stopJump() {
-    this.jumping = false;
-    this.pos.y = this.basePos.y;
   }
 
   draw() {
     if (!this.alive) return;
+
     let ratio = this.img.height / this.img.width;
     image(
       this.img,
@@ -270,9 +221,12 @@ class Character {
 
   drawHP() {
     if (!this.alive) return;
-    let w = 50, h = 6;
+
+    let w = 50;
+    let h = 6;
     let x = this.pos.x - w / 2;
     let y = this.pos.y - 70;
+
     fill(255, 0, 0);
     rect(x, y, w, h);
     fill(0, 255, 0);
@@ -298,7 +252,7 @@ class Task {
     this.target = target;
 
     let dir = p5.Vector.sub(target.pos, this.pos).normalize();
-    this.velocity = dir.mult(2.4); // ⬅️ пришвидшено
+    this.velocity = dir.mult(2.2);
 
     this.size = 48;
     this.clicked = false;
@@ -309,13 +263,22 @@ class Task {
   }
 
   draw() {
-    let img = this.clicked ? beetrootImg : taskImg;
-    let ratio = img.height / img.width;
-    image(img, this.pos.x, this.pos.y, this.size, this.size * ratio);
+    image(
+      this.clicked ? beetrootImg : taskImg,
+      this.pos.x,
+      this.pos.y,
+      this.size,
+      this.size
+    );
   }
 
   hits(character) {
-    return dist(this.pos.x, this.pos.y, character.pos.x, character.pos.y) < 45;
+    return dist(
+      this.pos.x,
+      this.pos.y,
+      character.pos.x,
+      character.pos.y
+    ) < 45;
   }
 
   isClicked(mx, my) {
@@ -324,8 +287,8 @@ class Task {
 
   offscreen() {
     return (
-      this.pos.x < -80 || this.pos.x > width + 80 ||
-      this.pos.y < -80 || this.pos.y > height + 80
+      this.pos.x < -60 || this.pos.x > width + 60 ||
+      this.pos.y < -60 || this.pos.y > height + 60
     );
   }
 }
