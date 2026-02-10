@@ -9,16 +9,16 @@ let tasks = [];
 const TOTAL_TASKS = 30;
 let spawnedTasks = 0;
 
-let gameStarted = false;
 let gameOver = false;
 let youWin = false;
+let gameStarted = false;
 
 let activeTasksPerTarget = new Map();
 
 /* ===== PRELOAD ===== */
-
 function preload() {
   bg = loadImage('images/background.png');
+
   mainImg = loadImage('images/main.png');
 
   for (let i = 1; i <= 5; i++) {
@@ -30,7 +30,6 @@ function preload() {
 }
 
 /* ===== SETUP ===== */
-
 function setup() {
   createCanvas(1200, 800);
   imageMode(CENTER);
@@ -50,12 +49,13 @@ function setup() {
     });
   }
 
-  // зсуви для конкретних персонажів
-  npcPositions[1].x += 60;  // character_2 → правіше
-  npcPositions[1].y -= 40;  // і вище
-  npcPositions[2].x -= 30;  // character_3 → трохи лівіше
+  // ⬅️ додаткові зсуви
+  npcPositions[1].x += 70; // character_2 ще правіше
+  npcPositions[1].y -= 20;
 
-  // міняємо місцями main і character_4 (index 3)
+  npcPositions[2].x -= 50; // character_3 ще лівіше
+
+  // swap main ↔ character_4 (index 3)
   let swapIndex = 3;
   let mainOldPos = { x: width / 2, y: height - 120 };
 
@@ -65,29 +65,25 @@ function setup() {
     mainImg,
     true
   );
+  mainCharacter.jumpHint = true;
 
   for (let i = 0; i < characterImgs.length; i++) {
     let pos = npcPositions[i];
     if (i === swapIndex) pos = mainOldPos;
 
-    let c = new Character(pos.x, pos.y, characterImgs[i], false);
+    let c = new Character(pos.x, pos.y, characterImgs[i], false, i === 3);
     characters.push(c);
     activeTasksPerTarget.set(c, 0);
   }
 }
 
 /* ===== DRAW ===== */
-
 function draw() {
-  drawBackground();
+  image(bg, width / 2, height / 2, width, height);
 
   if (gameOver) {
     drawEndScreen();
     return;
-  }
-
-  if (!gameStarted) {
-    mainCharacter.jumpHint();
   }
 
   mainCharacter.update();
@@ -107,45 +103,7 @@ function draw() {
   }
 }
 
-/* ===== BACKGROUND ===== */
-
-function drawBackground() {
-  let canvasRatio = width / height;
-  let imgRatio = bg.width / bg.height;
-
-  let w, h;
-  if (canvasRatio > imgRatio) {
-    w = width;
-    h = width / imgRatio;
-  } else {
-    h = height;
-    w = height * imgRatio;
-  }
-
-  image(bg, width / 2, height / 2, w, h);
-}
-
-/* ===== INPUT ===== */
-
-function mousePressed() {
-  if (!gameStarted) {
-    if (dist(mouseX, mouseY, mainCharacter.pos.x, mainCharacter.pos.y) < 60) {
-      gameStarted = true;
-      mainCharacter.stopJump();
-    }
-    return;
-  }
-
-  for (let t of tasks) {
-    if (!t.clicked && t.isClicked(mouseX, mouseY)) {
-      t.clicked = true;
-      break;
-    }
-  }
-}
-
 /* ===== SPAWN ===== */
-
 function handleSpawning() {
   if (spawnedTasks >= TOTAL_TASKS) return;
   if (frameCount % 50 !== 0) return;
@@ -170,8 +128,7 @@ function handleSpawning() {
   spawnedTasks++;
 }
 
-/* ===== TASK UPDATE ===== */
-
+/* ===== TASKS ===== */
 function updateTasks() {
   for (let i = tasks.length - 1; i >= 0; i--) {
     let t = tasks[i];
@@ -179,7 +136,9 @@ function updateTasks() {
     t.draw();
 
     if (t.hits(t.target)) {
-      t.clicked ? t.target.heal() : t.target.takeDamage();
+      if (t.clicked) t.target.heal();
+      else t.target.takeDamage();
+
       activeTasksPerTarget.set(t.target, 0);
       tasks.splice(i, 1);
       continue;
@@ -192,8 +151,25 @@ function updateTasks() {
   }
 }
 
-/* ===== GAME STATE ===== */
+/* ===== INPUT ===== */
+function mousePressed() {
+  if (!gameStarted) {
+    if (dist(mouseX, mouseY, mainCharacter.pos.x, mainCharacter.pos.y) < 40) {
+      gameStarted = true;
+      mainCharacter.jumpHint = false;
+      return;
+    }
+  }
 
+  for (let t of tasks) {
+    if (!t.clicked && t.isClicked(mouseX, mouseY)) {
+      t.clicked = true;
+      break;
+    }
+  }
+}
+
+/* ===== GAME STATE ===== */
 function checkEndConditions() {
   if (!mainCharacter.alive) gameOver = true;
 
@@ -210,6 +186,7 @@ function checkEndConditions() {
 function drawEndScreen() {
   fill(0, 180);
   rect(0, 0, width, height);
+
   fill(255);
   textSize(48);
   text(youWin ? 'YOU WIN 🎉' : 'GAME OVER', width / 2, height / 2);
@@ -222,57 +199,44 @@ function drawProgress() {
 }
 
 /* ===== CLASSES ===== */
-
 class Character {
-  constructor(x, y, img, isMain) {
-    this.basePos = createVector(x, y);
-    this.pos = this.basePos.copy();
+  constructor(x, y, img, isMain, isChar4 = false) {
+    this.pos = createVector(x, y);
     this.img = img;
     this.isMain = isMain;
+    this.isChar4 = isChar4;
 
     this.maxHP = 3;
     this.hp = 3;
     this.alive = true;
 
-    this.displayWidth = 96;
-
-    this.jumpPhase = 0;
-    this.jumping = false;
+    this.baseWidth = 96;
+    this.scale = isChar4 ? 1.15 : 1; // ⬅️ character_4 трохи більший
+    this.jumpHint = false;
   }
 
   update() {
-    if (this.jumping) {
-      this.jumpPhase += 0.08;
-      this.pos.y = this.basePos.y + sin(this.jumpPhase) * 12;
+    if (this.jumpHint) {
+      this.pos.y += sin(frameCount * 0.15) * 2;
     }
-  }
-
-  jumpHint() {
-    this.jumping = true;
-  }
-
-  stopJump() {
-    this.jumping = false;
-    this.pos.y = this.basePos.y;
   }
 
   draw() {
     if (!this.alive) return;
+
     let ratio = this.img.height / this.img.width;
-    image(
-      this.img,
-      this.pos.x,
-      this.pos.y,
-      this.displayWidth,
-      this.displayWidth * ratio
-    );
+    let w = this.baseWidth * this.scale;
+    image(this.img, this.pos.x, this.pos.y, w, w * ratio);
   }
 
   drawHP() {
     if (!this.alive) return;
-    let w = 50, h = 6;
+
+    let w = 50;
+    let h = 6;
     let x = this.pos.x - w / 2;
     let y = this.pos.y - 70;
+
     fill(255, 0, 0);
     rect(x, y, w, h);
     fill(0, 255, 0);
@@ -298,7 +262,7 @@ class Task {
     this.target = target;
 
     let dir = p5.Vector.sub(target.pos, this.pos).normalize();
-    this.velocity = dir.mult(2.4); // ⬅️ пришвидшено
+    this.velocity = dir.mult(2.6); // ⬅️ ще +0.2 швидкості
 
     this.size = 48;
     this.clicked = false;
@@ -324,8 +288,8 @@ class Task {
 
   offscreen() {
     return (
-      this.pos.x < -80 || this.pos.x > width + 80 ||
-      this.pos.y < -80 || this.pos.y > height + 80
+      this.pos.x < -60 || this.pos.x > width + 60 ||
+      this.pos.y < -60 || this.pos.y > height + 60
     );
   }
 }
