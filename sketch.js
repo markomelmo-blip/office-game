@@ -24,7 +24,6 @@ function preload() {
 function setup() {
   createCanvas(800, 800);
   imageMode(CENTER);
-
   setupCharacters();
 }
 
@@ -32,29 +31,23 @@ function setupCharacters() {
   let angles = [0, TWO_PI / 3, (2 * TWO_PI) / 3];
 
   characters = characters.map((img, i) => {
-    let r = BASE_RADIUS;
-    let x = CENTER.x + cos(angles[i]) * r;
-    let y = CENTER.y + sin(angles[i]) * r;
+    let x = CENTER.x + cos(angles[i]) * BASE_RADIUS;
+    let y = CENTER.y + sin(angles[i]) * BASE_RADIUS;
 
-    // Індивідуальні правки позицій
-    if (i === 0) { // character_2.png
-      x += 40;
-      y -= 30;
-    }
-    if (i === 1) { // character_3.png
-      x -= 15;
-    }
+    if (i === 0) { x += 40; y -= 30; }
+    if (i === 1) { x -= 15; }
 
     return {
       img,
       x,
       y,
-      scale: i === 2 ? 1.1 : 1 // character_4 трохи більший
+      scale: i === 2 ? 1.1 : 1
     };
   });
 }
 
 function draw() {
+  background(20);
   drawBackground();
 
   drawCharacters();
@@ -69,18 +62,26 @@ function draw() {
   drawFoods();
 }
 
+/* =======================
+   ВИПРАВЛЕНИЙ ФОН
+======================= */
 function drawBackground() {
-  let size = min(bgImg.width, bgImg.height);
+  let bgSize = 640; // менший за canvas
+
+  let cropSize = min(bgImg.width, bgImg.height);
+  let sx = (bgImg.width - cropSize) / 2;
+  let sy = (bgImg.height - cropSize) / 2;
+
   image(
     bgImg,
-    width / 2,
-    height / 2,
-    width,
-    height,
-    (bgImg.width - size) / 2,
-    (bgImg.height - size) / 2,
-    size,
-    size
+    CENTER.x,
+    CENTER.y,
+    bgSize,
+    bgSize,
+    sx,
+    sy,
+    cropSize,
+    cropSize
   );
 }
 
@@ -106,8 +107,7 @@ function idleBounce() {
 
 function mousePressed() {
   if (!gameStarted) {
-    let d = dist(mouseX, mouseY, CENTER.x, CENTER.y);
-    if (d < 60) {
+    if (dist(mouseX, mouseY, CENTER.x, CENTER.y) < 60) {
       gameStarted = true;
       spawnFood();
     }
@@ -130,9 +130,8 @@ function updateFoods() {
   });
 
   foods = foods.filter(f => {
-    let d = dist(f.x, f.y, CENTER.x, CENTER.y);
-    if (d < 50) {
-      hp += 1;
+    if (dist(f.x, f.y, CENTER.x, CENTER.y) < 50) {
+      hp++;
       return false;
     }
     return true;
