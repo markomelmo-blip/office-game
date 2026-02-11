@@ -6,7 +6,7 @@ let mainCharacter;
 let characters = [];
 let tasks = [];
 
-const TOTAL_TASKS = 30; // ← повернули 30
+const TOTAL_TASKS = 30;
 let spawnedTasks = 0;
 
 let gameOver = false;
@@ -15,6 +15,8 @@ let gameStarted = false;
 
 let activeTasksPerTarget = new Map();
 let draggedCharacter = null;
+
+let endAlpha = 0; // для fade-in
 
 /* ===== PRELOAD ===== */
 function preload() {
@@ -33,7 +35,6 @@ function preload() {
 function setup() {
   createCanvas(1200, 800);
   imageMode(CENTER);
-  textAlign(CENTER, CENTER);
 
   let centerX = width / 2;
   let centerY = height / 2 - 80;
@@ -189,7 +190,7 @@ function updateTasks() {
   }
 }
 
-/* ===== END STATE ===== */
+/* ===== END CONDITIONS ===== */
 function checkEndConditions() {
   if (!mainCharacter.alive) gameOver = true;
 
@@ -203,25 +204,40 @@ function checkEndConditions() {
   }
 }
 
+/* ===== FADE-IN END SCREEN ===== */
 function drawEndScreen() {
-  fill(0, 180);
+  endAlpha = min(endAlpha + 4, 200);
+
+  push();
+  fill(0, endAlpha);
   rect(0, 0, width, height);
 
-  fill(255);
-  textSize(48);
-  text(youWin ? 'YOU WIN 🎉' : 'GAME OVER', width / 2, height / 2);
+  textAlign(CENTER, CENTER);
+  textSize(56);
+  fill(255, endAlpha + 55);
+
+  text(
+    youWin ? "YOU WIN 🎉" : "GAME OVER",
+    width / 2,
+    height / 2
+  );
+  pop();
 }
 
-/* ===== ЗБІЛЬШЕНИЙ ЛІЧИЛЬНИК ===== */
+/* ===== LARGE PROGRESS COUNTER ===== */
 function drawProgress() {
-  textAlign(RIGHT, TOP);
+  push();
 
+  textAlign(RIGHT, TOP);
   textSize(36);
+
   fill(0);
   text(`${spawnedTasks}/${TOTAL_TASKS}`, width - 32, 22);
 
   fill(255);
   text(`${spawnedTasks}/${TOTAL_TASKS}`, width - 30, 20);
+
+  pop();
 }
 
 /* ===== CLASSES ===== */
