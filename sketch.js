@@ -6,7 +6,7 @@ let mainCharacter;
 let characters = [];
 let tasks = [];
 
-const TOTAL_TASKS = 30;
+const TOTAL_TASKS = 30; // ← повернули 30
 let spawnedTasks = 0;
 
 let gameOver = false;
@@ -14,11 +14,11 @@ let youWin = false;
 let gameStarted = false;
 
 let activeTasksPerTarget = new Map();
+let draggedCharacter = null;
 
 /* ===== PRELOAD ===== */
 function preload() {
   bg = loadImage('images/background.png');
-
   mainImg = loadImage('images/main.png');
 
   for (let i = 1; i <= 5; i++) {
@@ -49,13 +49,10 @@ function setup() {
     });
   }
 
-  // ⬅️ додаткові зсуви
-  npcPositions[1].x += 70; // character_2 ще правіше
-  npcPositions[1].y -= 20;
+  npcPositions[1].x += 90;
+  npcPositions[1].y -= 30;
+  npcPositions[2].x -= 80;
 
-  npcPositions[2].x -= 50; // character_3 ще лівіше
-
-  // swap main ↔ character_4 (index 3)
   let swapIndex = 3;
   let mainOldPos = { x: width / 2, y: height - 120 };
 
@@ -103,10 +100,52 @@ function draw() {
   }
 }
 
-/* ===== SPAWN ===== */
+/* ===== INPUT ===== */
+function mousePressed() {
+  if (!gameStarted) {
+
+    if (dist(mouseX, mouseY, mainCharacter.pos.x, mainCharacter.pos.y) < 40) {
+      gameStarted = true;
+      mainCharacter.jumpHint = false;
+      return;
+    }
+
+    for (let c of characters) {
+      if (c.alive && dist(mouseX, mouseY, c.pos.x, c.pos.y) < 50) {
+        draggedCharacter = c;
+        break;
+      }
+    }
+  }
+
+  if (gameStarted) {
+    for (let t of tasks) {
+      if (!t.clicked && t.isClicked(mouseX, mouseY)) {
+        t.clicked = true;
+        break;
+      }
+    }
+  }
+}
+
+function mouseDragged() {
+  if (!gameStarted && draggedCharacter) {
+    let w = draggedCharacter.getWidth();
+    let h = draggedCharacter.getHeight();
+
+    draggedCharacter.pos.x = constrain(mouseX, w / 2, width - w / 2);
+    draggedCharacter.pos.y = constrain(mouseY, h / 2, height - h / 2);
+  }
+}
+
+function mouseReleased() {
+  draggedCharacter = null;
+}
+
+/* ===== GAME LOGIC ===== */
 function handleSpawning() {
   if (spawnedTasks >= TOTAL_TASKS) return;
-  if (frameCount % 50 !== 0) return;
+  if (frameCount % 45 !== 0) return;
 
   let available = characters.filter(
     c => c.alive && activeTasksPerTarget.get(c) === 0
@@ -128,7 +167,6 @@ function handleSpawning() {
   spawnedTasks++;
 }
 
-/* ===== TASKS ===== */
 function updateTasks() {
   for (let i = tasks.length - 1; i >= 0; i--) {
     let t = tasks[i];
@@ -151,25 +189,7 @@ function updateTasks() {
   }
 }
 
-/* ===== INPUT ===== */
-function mousePressed() {
-  if (!gameStarted) {
-    if (dist(mouseX, mouseY, mainCharacter.pos.x, mainCharacter.pos.y) < 40) {
-      gameStarted = true;
-      mainCharacter.jumpHint = false;
-      return;
-    }
-  }
-
-  for (let t of tasks) {
-    if (!t.clicked && t.isClicked(mouseX, mouseY)) {
-      t.clicked = true;
-      break;
-    }
-  }
-}
-
-/* ===== GAME STATE ===== */
+/* ===== END STATE ===== */
 function checkEndConditions() {
   if (!mainCharacter.alive) gameOver = true;
 
@@ -192,10 +212,16 @@ function drawEndScreen() {
   text(youWin ? 'YOU WIN 🎉' : 'GAME OVER', width / 2, height / 2);
 }
 
+/* ===== ЗБІЛЬШЕНИЙ ЛІЧИЛЬНИК ===== */
 function drawProgress() {
+  textAlign(RIGHT, TOP);
+
+  textSize(36);
+  fill(0);
+  text(`${spawnedTasks}/${TOTAL_TASKS}`, width - 32, 22);
+
   fill(255);
-  textSize(18);
-  text(`${spawnedTasks}/${TOTAL_TASKS}`, width - 60, 30);
+  text(`${spawnedTasks}/${TOTAL_TASKS}`, width - 30, 20);
 }
 
 /* ===== CLASSES ===== */
@@ -211,7 +237,7 @@ class Character {
     this.alive = true;
 
     this.baseWidth = 96;
-    this.scale = isChar4 ? 1.15 : 1; // ⬅️ character_4 трохи більший
+    this.scale = isChar4 ? 1.15 : 1;
     this.jumpHint = false;
   }
 
@@ -221,12 +247,18 @@ class Character {
     }
   }
 
+  getWidth() {
+    return this.baseWidth * this.scale;
+  }
+
+  getHeight() {
+    let ratio = this.img.height / this.img.width;
+    return this.getWidth() * ratio;
+  }
+
   draw() {
     if (!this.alive) return;
-
-    let ratio = this.img.height / this.img.width;
-    let w = this.baseWidth * this.scale;
-    image(this.img, this.pos.x, this.pos.y, w, w * ratio);
+    image(this.img, this.pos.x, this.pos.y, this.getWidth(), this.getHeight());
   }
 
   drawHP() {
@@ -262,7 +294,7 @@ class Task {
     this.target = target;
 
     let dir = p5.Vector.sub(target.pos, this.pos).normalize();
-    this.velocity = dir.mult(2.6); // ⬅️ ще +0.2 швидкості
+    this.velocity = dir.mult(2.6);
 
     this.size = 48;
     this.clicked = false;
